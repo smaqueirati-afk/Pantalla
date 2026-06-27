@@ -1,0 +1,21 @@
+idf_component_register(
+    SRCS
+        "ui_main.c"
+        "screen_now_playing.c"
+        "screen_screensaver.c"
+        "widget_fft.c"
+        "widget_vinyl.c"
+        "widget_audio_mode.c"
+        "palette_extractor.c"
+    INCLUDE_DIRS
+        "."
+        ".."
+    REQUIRES
+        esp_system
+        waveshare__esp32_p4_wifi6_touch_lcd_7b
+        state
+        esp_lvgl_port
+        freertos
+        log
+        esp_timer
+)

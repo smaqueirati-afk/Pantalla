@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS
+        "app_state.c"
+        "event_bus.c"
+        "nvs_store.c"
+    INCLUDE_DIRS
+        "."
+        ".."
+    REQUIRES
+        nvs_flash
+        freertos
+        log
+)

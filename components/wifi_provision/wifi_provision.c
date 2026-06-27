@@ -1,0 +1,279 @@
+﻿/**
+ * @file wifi_provision.c
+ * @brief WiFi provisioning via portal captivo + IP estÃ¡tica 192.168.1.150
+ */
+
+#include "wifi_provision.h"
+#include "esp_log.h"
+#include "esp_err.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_http_server.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include <string.h>
+#include <stdlib.h>
+
+static const char *TAG = "wifi_provision";
+
+#define WIFI_SSID_KEY    "wifi_ssid"
+#define WIFI_PASS_KEY    "wifi_pass"
+#define HA_TOKEN_KEY     "ha_token"
+#define NVS_NAMESPACE    "domotica"
+#define AP_SSID          "Domotica-Setup"
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
+#define WIFI_MAX_RETRY     5
+
+/* IP estÃ¡tica en la red de casa */
+#define STATIC_IP        "192.168.1.150"
+#define STATIC_GW        "192.168.1.1"
+#define STATIC_NETMASK   "255.255.255.0"
+
+static EventGroupHandle_t s_wifi_event_group = NULL;
+static int s_retry_num = 0;
+static httpd_handle_t s_server = NULL;
+
+static const char *PORTAL_HTML =
+"<!DOCTYPE html><html><head>"
+"<meta charset='utf-8'>"
+"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+"<title>Domotica Setup</title>"
+"<style>"
+"body{font-family:sans-serif;background:#101014;color:#fff;display:flex;"
+"justify-content:center;align-items:center;min-height:100vh;margin:0}"
+".card{background:#1e1e24;padding:2rem;border-radius:12px;width:90%;max-width:400px}"
+"h1{color:#7c5cfc;margin-top:0}input{width:100%;padding:10px;margin:8px 0 16px;"
+"background:#2a2a35;border:1px solid #444;border-radius:6px;color:#fff;box-sizing:border-box}"
+"button{width:100%;padding:12px;background:#7c5cfc;color:#fff;border:none;"
+"border-radius:6px;font-size:16px;cursor:pointer}"
+".label{color:#aaa;font-size:14px}.info{color:#7c5cfc;font-size:13px;margin-bottom:1rem}"
+"</style></head><body><div class='card'>"
+"<h1>Domotica Setup</h1>"
+"<div class='info'>IP fija: 192.168.1.150</div>"
+"<form method='POST' action='/save'>"
+"<div class='label'>Red WiFi (SSID)</div>"
+"<input name='ssid' type='text' placeholder='MiRedWiFi' required>"
+"<div class='label'>Contrasena WiFi</div>"
+"<input name='pass' type='password' placeholder='contrasena'>"
+"<div class='label'>Token Home Assistant</div>"
+"<input name='token' type='text' placeholder='eyJ0...' required>"
+"<button type='submit'>Guardar y conectar</button>"
+"</form></div></body></html>";
+
+static const char *SUCCESS_HTML =
+"<!DOCTYPE html><html><head><meta charset='utf-8'>"
+"<title>Guardado</title>"
+"<style>body{font-family:sans-serif;background:#101014;color:#fff;"
+"display:flex;justify-content:center;align-items:center;min-height:100vh}"
+".card{background:#1e1e24;padding:2rem;border-radius:12px;text-align:center}"
+"h1{color:#4caf50}.ip{color:#7c5cfc;font-size:1.2rem;margin:1rem 0}"
+"</style></head><body><div class='card'>"
+"<h1>Configuracion guardada</h1>"
+"<div class='ip'>IP: 192.168.1.150</div>"
+"<p>El dispositivo se reiniciara y conectara a tu red.</p>"
+"<p>Podras acceder desde tu red en:<br><b>192.168.1.150</b></p>"
+"</div></body></html>";
+
+static void url_decode(char *dst, const char *src, size_t max_len)
+{
+    size_t i = 0, j = 0;
+    while (src[i] && j < max_len - 1) {
+        if (src[i] == '%' && src[i+1] && src[i+2]) {
+            char hex[3] = {src[i+1], src[i+2], 0};
+            dst[j++] = (char)strtol(hex, NULL, 16);
+            i += 3;
+        } else if (src[i] == '+') {
+            dst[j++] = ' ';
+            i++;
+        } else {
+            dst[j++] = src[i++];
+        }
+    }
+    dst[j] = 0;
+}
+
+static bool get_form_field(const char *body, const char *key, char *out, size_t max_len)
+{
+    char search[64];
+    snprintf(search, sizeof(search), "%s=", key);
+    const char *p = strstr(body, search);
+    if (!p) return false;
+    p += strlen(search);
+    const char *end = strchr(p, '&');
+    size_t len = end ? (size_t)(end - p) : strlen(p);
+    if (len >= max_len) len = max_len - 1;
+    char tmp[256] = {0};
+    if (len < sizeof(tmp)) {
+        memcpy(tmp, p, len);
+        url_decode(out, tmp, max_len);
+    }
+    return true;
+}
+
+static esp_err_t root_get_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_send(req, PORTAL_HTML, strlen(PORTAL_HTML));
+    return ESP_OK;
+}
+
+static esp_err_t save_post_handler(httpd_req_t *req)
+{
+    char body[512] = {0};
+    int ret = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (ret <= 0) return ESP_FAIL;
+
+    char ssid[64] = {0}, pass[64] = {0}, token[256] = {0};
+    get_form_field(body, "ssid",  ssid,  sizeof(ssid));
+    get_form_field(body, "pass",  pass,  sizeof(pass));
+    get_form_field(body, "token", token, sizeof(token));
+
+    ESP_LOGI(TAG, "Guardando ssid=%s", ssid);
+
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_str(nvs, WIFI_SSID_KEY, ssid);
+        nvs_set_str(nvs, WIFI_PASS_KEY, pass);
+        nvs_set_str(nvs, HA_TOKEN_KEY,  token);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_send(req, SUCCESS_HTML, strlen(SUCCESS_HTML));
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    esp_restart();
+    return ESP_OK;
+}
+
+static void wifi_event_handler(void *arg, esp_event_base_t event_base,
+                               int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (s_retry_num < WIFI_MAX_RETRY) {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "Reintentando WiFi (%d/%d)", s_retry_num, WIFI_MAX_RETRY);
+        } else {
+            if (s_wifi_event_group)
+                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        }
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        if (s_wifi_event_group)
+            xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+bool wifi_provision_has_credentials(void)
+{
+    nvs_handle_t nvs;
+    char ssid[64] = {0};
+    size_t len = sizeof(ssid);
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) return false;
+    esp_err_t err = nvs_get_str(nvs, WIFI_SSID_KEY, ssid, &len);
+    nvs_close(nvs);
+    return (err == ESP_OK && strlen(ssid) > 0);
+}
+
+bool wifi_provision_get_credentials(char *ssid, size_t ssid_len,
+                                    char *pass, size_t pass_len,
+                                    char *token, size_t token_len)
+{
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) return false;
+    nvs_get_str(nvs, WIFI_SSID_KEY, ssid,  &ssid_len);
+    nvs_get_str(nvs, WIFI_PASS_KEY, pass,  &pass_len);
+    nvs_get_str(nvs, HA_TOKEN_KEY,  token, &token_len);
+    nvs_close(nvs);
+    return true;
+}
+
+void wifi_provision_start_portal(void)
+{
+    ESP_LOGI(TAG, "Portal captivo: %s", AP_SSID);
+
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    wifi_config_t ap_config = {
+        .ap = {
+            .ssid = AP_SSID,
+            .ssid_len = strlen(AP_SSID),
+            .max_connection = 4,
+            .authmode = WIFI_AUTH_OPEN,
+        },
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    httpd_config_t server_cfg = HTTPD_DEFAULT_CONFIG();
+    if (httpd_start(&s_server, &server_cfg) == ESP_OK) {
+        httpd_uri_t root = { .uri = "/",     .method = HTTP_GET,  .handler = root_get_handler };
+        httpd_uri_t save = { .uri = "/save", .method = HTTP_POST, .handler = save_post_handler };
+        httpd_register_uri_handler(s_server, &root);
+        httpd_register_uri_handler(s_server, &save);
+        ESP_LOGI(TAG, "Portal en http://192.168.4.1");
+    }
+}
+
+bool wifi_provision_connect(void)
+{
+    char ssid[64] = {0}, pass[64] = {0}, token[256] = {0};
+    if (!wifi_provision_get_credentials(ssid, sizeof(ssid),
+                                        pass, sizeof(pass),
+                                        token, sizeof(token))) return false;
+
+    ESP_LOGI(TAG, "Conectando a: %s", ssid);
+
+    s_wifi_event_group = xEventGroupCreate();
+    esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t inst_any, inst_got_ip;
+    esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                        &wifi_event_handler, NULL, &inst_any);
+    esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                        &wifi_event_handler, NULL, &inst_got_ip);
+
+    /* IP estÃ¡tica */
+    ESP_ERROR_CHECK(esp_netif_dhcpc_stop(sta_netif));
+    esp_netif_ip_info_t ip_info;
+    esp_netif_str_to_ip4(STATIC_IP,      (esp_ip4_addr_t *)&ip_info.ip);
+    esp_netif_str_to_ip4(STATIC_GW,      (esp_ip4_addr_t *)&ip_info.gw);
+    esp_netif_str_to_ip4(STATIC_NETMASK, (esp_ip4_addr_t *)&ip_info.netmask);
+    ESP_ERROR_CHECK(esp_netif_set_ip_info(sta_netif, &ip_info));
+    ESP_LOGI(TAG, "IP estatica: %s", STATIC_IP);
+
+    wifi_config_t sta_config = {0};
+    memcpy(sta_config.sta.ssid, ssid, sizeof(sta_config.sta.ssid)-1);
+    memcpy(sta_config.sta.password, pass, sizeof(sta_config.sta.password)-1);
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                                           pdFALSE, pdFALSE,
+                                           pdMS_TO_TICKS(15000));
+    return (bits & WIFI_CONNECTED_BIT) != 0;
+}
+
+

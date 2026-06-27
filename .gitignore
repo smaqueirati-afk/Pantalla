@@ -1,0 +1,23 @@
+﻿build/
+sdkconfig.old
+*.bin
+*.elf
+*.map
+managed_components/
+dependencies.lock
+build/log/
+*.log
+*.tmp
+*.bak
+*.bak2
+*.placeholder
+*.orig
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Librerias vendorizadas (se regeneran con idf.py reconfigure)
+components/lvgl__lvgl/
+components/waveshare__esp32_p4_wifi6_touch_lcd_7b/
