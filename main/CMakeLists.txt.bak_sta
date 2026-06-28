@@ -1,4 +1,4 @@
-idf_component_register(SRCS
+﻿idf_component_register(SRCS
     "main.c"
     "app_nav.c"
     "main_menu.c"
@@ -10,7 +10,6 @@ idf_component_register(SRCS
 
     INCLUDE_DIRS "."
     REQUIRES
-        wifi_provision
         esp_wifi
         esp_netif
         esp_event

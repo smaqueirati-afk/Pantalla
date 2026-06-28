@@ -1,6 +1,6 @@
-﻿/**
+/**
  * @file wifi_provision.c
- * @brief WiFi provisioning via portal captivo + IP estÃƒÂ¡tica 192.168.1.150
+ * @brief WiFi provisioning via portal captivo + IP estÃ¡tica 192.168.1.150
  */
 
 #include "wifi_provision.h"
@@ -30,7 +30,7 @@ static const char *TAG = "wifi_provision";
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_MAX_RETRY     5
 
-/* IP estÃƒÂ¡tica en la red de casa */
+/* IP estÃ¡tica en la red de casa */
 #define STATIC_IP        "192.168.1.150"
 #define STATIC_GW        "192.168.1.1"
 #define STATIC_NETMASK   "255.255.255.0"
@@ -204,10 +204,10 @@ void wifi_provision_start_portal(void)
 {
     ESP_LOGI(TAG, "Portal captivo: %s", AP_SSID);
 
-    if (esp_netif_get_handle_from_ifkey("WIFI_AP_DEF") == NULL) esp_netif_create_default_wifi_ap();
+    esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    { esp_err_t e = esp_wifi_init(&cfg); if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(e); }
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     wifi_config_t ap_config = {
         .ap = {
@@ -241,10 +241,10 @@ bool wifi_provision_connect(void)
     ESP_LOGI(TAG, "Conectando a: %s", ssid);
 
     s_wifi_event_group = xEventGroupCreate();
-    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"); if (sta_netif == NULL) sta_netif = esp_netif_create_default_wifi_sta();
+    esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    { esp_err_t e = esp_wifi_init(&cfg); if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(e); }
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     esp_event_handler_instance_t inst_any, inst_got_ip;
     esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
