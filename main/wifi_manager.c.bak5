@@ -53,8 +53,8 @@ void wifi_manager_start(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    /* (s_ap_netif ya no necesario) */
-    /* esp_netif_create_default_wifi_ap() removido: el stack wifi_remote ya lo crea */
+    static esp_netif_t *s_ap_netif = NULL;
+    if (s_ap_netif == NULL) s_ap_netif = esp_netif_create_default_wifi_ap();
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 
     uint8_t ap_mac[6] = {0x80, 0xF1, 0xB2, 0xD3, 0x2A, 0x32};

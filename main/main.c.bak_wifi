@@ -64,6 +64,6 @@ void app_main(void)
     ESP_LOGI(TAG, "UI lista");
 
     /* 3. Tareas de fondo */
-    wifi_manager_start();
+    /* wifi_manager_start(); // desactivado temporal - esp_hosted v1.4 API */
     xTaskCreate(status_task, "status", 4096, NULL, tskIDLE_PRIORITY + 2, NULL);
 }
