@@ -8,7 +8,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
 #include "esp_lvgl_port.h"
 #include "bsp/esp-bsp.h"
 #include "app_nav.h"
@@ -47,7 +46,7 @@ static void status_task(void *arg)
 void app_main(void)
 {
     ESP_LOGI(TAG, "SM Domotica - ESP32-P4 arrancando");
-    nvs_flash_init();
+
     /* 1. Inicializar display + touch + LVGL (Waveshare BSP) */
     bsp_display_start();
     ESP_LOGI(TAG, "Display inicializado");

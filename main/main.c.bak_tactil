@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file main.c
  * @brief SM Domotica ESP32-P4 - Waveshare ESP32-P4-WiFi6-Touch-LCD-7B
  */
@@ -8,13 +8,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
 #include "esp_lvgl_port.h"
 #include "bsp/esp-bsp.h"
 #include "app_nav.h"
 #include "wifi_manager.h"
 #include "wifi_config_screen.h"
-#include "wifi_provision.h"
 /* wifi_manager temporalmente deshabilitado */
 
 static const char *TAG = "main";
@@ -47,7 +45,7 @@ static void status_task(void *arg)
 void app_main(void)
 {
     ESP_LOGI(TAG, "SM Domotica - ESP32-P4 arrancando");
-    nvs_flash_init();
+
     /* 1. Inicializar display + touch + LVGL (Waveshare BSP) */
     bsp_display_start();
     ESP_LOGI(TAG, "Display inicializado");
@@ -66,17 +64,6 @@ void app_main(void)
     ESP_LOGI(TAG, "UI lista");
 
     /* 3. Tareas de fondo */
-    /* WiFi: si hay credenciales conecta (STA); si no, muestra pantalla de config tactil */
-    if (wifi_provision_has_credentials()) {
-        ESP_LOGI(TAG, "Credenciales guardadas, conectando (STA)...");
-        if (wifi_provision_connect()) ESP_LOGI(TAG, "WiFi CONECTADO");
-        else {
-            ESP_LOGE(TAG, "Fallo conexion - mostrando config");
-            if (lvgl_port_lock(0)) { wifi_config_screen_show(); lvgl_port_unlock(); }
-        }
-    } else {
-        ESP_LOGW(TAG, "Sin credenciales - mostrando pantalla de config WiFi");
-        if (lvgl_port_lock(0)) { wifi_config_screen_show(); lvgl_port_unlock(); }
-    }
+    wifi_manager_start();
     xTaskCreate(status_task, "status", 4096, NULL, tskIDLE_PRIORITY + 2, NULL);
 }

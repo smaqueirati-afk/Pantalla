@@ -119,34 +119,13 @@ void wifi_config_screen_show(void) {
 
     /* Teclado grande */
     kb = lv_keyboard_create(scr);
-
-    /* Fondo del teclado: gris medio para que las teclas resalten */
-    static lv_style_t kb_bg_style;
-    lv_style_init(&kb_bg_style);
-    lv_style_set_bg_color(&kb_bg_style, lv_color_hex(0x3a3f4b));
-    lv_style_set_text_font(&kb_bg_style, &lv_font_montserrat_28);
-    lv_style_set_pad_all(&kb_bg_style, 6);
-    lv_obj_add_style(kb, &kb_bg_style, 0);
-
-    /* Teclas (incluye especiales: Shift, ABC, borrar, Enter) - claras con texto oscuro */
-    static lv_style_t kb_btn_style;
-    lv_style_init(&kb_btn_style);
-    lv_style_set_bg_color(&kb_btn_style, lv_color_hex(0xe8eaed));
-    lv_style_set_bg_opa(&kb_btn_style, LV_OPA_COVER);
-    lv_style_set_text_color(&kb_btn_style, lv_color_hex(0x111111));
-    lv_style_set_text_font(&kb_btn_style, &lv_font_montserrat_28);
-    lv_style_set_border_color(&kb_btn_style, lv_color_hex(0x3a3f4b));
-    lv_style_set_border_width(&kb_btn_style, 2);
-    lv_style_set_radius(&kb_btn_style, 8);
-    lv_obj_add_style(kb, &kb_btn_style, LV_PART_ITEMS);
-
-    /* Tecla presionada (feedback visual) */
-    static lv_style_t kb_btn_pr_style;
-    lv_style_init(&kb_btn_pr_style);
-    lv_style_set_bg_color(&kb_btn_pr_style, lv_color_hex(0x00d4ff));
-    lv_style_set_text_color(&kb_btn_pr_style, lv_color_hex(0x000000));
-    lv_obj_add_style(kb, &kb_btn_pr_style, LV_PART_ITEMS | LV_STATE_PRESSED);
-
+    static lv_style_t kb_style;
+    lv_style_init(&kb_style);
+    lv_style_set_bg_color(&kb_style, lv_color_hex(0x16213e));
+    lv_style_set_text_color(&kb_style, lv_color_white());
+    lv_style_set_text_font(&kb_style, &lv_font_montserrat_28);
+    lv_obj_add_style(kb, &kb_style, LV_PART_ITEMS);
+    lv_obj_add_style(kb, &kb_style, 0);
     lv_obj_set_size(kb, 1024, 280);
     lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);

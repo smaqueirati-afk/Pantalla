@@ -1,6 +1,6 @@
-﻿/**
+/**
  * @file wifi_provision.c
- * @brief WiFi provisioning via portal captivo + IP estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡tica 192.168.1.150
+ * @brief WiFi provisioning via portal captivo + IP estÃƒÆ’Ã‚Â¡tica 192.168.1.150
  */
 
 #include "wifi_provision.h"
@@ -31,7 +31,7 @@ static const char *TAG = "wifi_provision";
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_MAX_RETRY     5
 
-/* IP estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡tica en la red de casa */
+/* IP estÃƒÆ’Ã‚Â¡tica en la red de casa */
 #define STATIC_IP        "192.168.1.150"
 #define STATIC_GW        "192.168.1.1"
 #define STATIC_NETMASK   "255.255.255.0"
@@ -160,8 +160,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        wifi_event_sta_disconnected_t *disc = (wifi_event_sta_disconnected_t *)event_data;
-        ESP_LOGW(TAG, "Desconectado, reason=%d", disc ? disc->reason : -1);
         if (s_retry_num < WIFI_MAX_RETRY) {
             esp_wifi_connect();
             s_retry_num++;
@@ -267,11 +265,7 @@ bool wifi_provision_connect(void)
     ESP_LOGI(TAG, "Conectando a: %s", ssid);
 
     s_wifi_event_group = xEventGroupCreate();
-    { esp_err_t ei = esp_netif_init(); if (ei != ESP_OK && ei != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "netif_init: %d", ei); }
-    { esp_err_t ee = esp_event_loop_create_default(); if (ee != ESP_OK && ee != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "evt_loop: %d", ee); }
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    { esp_err_t ew = esp_wifi_init(&cfg); if (ew != ESP_OK && ew != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(ew); }
-    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"); /* NO crear netif STA: el stack wifi_remote del C6 ya lo crea */
+    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"); if (sta_netif == NULL) sta_netif = esp_netif_create_default_wifi_sta();
 
     /* (init movido arriba) */
     /* (init movido arriba) */
@@ -293,26 +287,11 @@ bool wifi_provision_connect(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    /* Forzar conexion directa: con el C6 el evento STA_START no siempre dispara */
-    vTaskDelay(pdMS_TO_TICKS(300));
-    esp_err_t ce = esp_wifi_connect();
-    ESP_LOGI(TAG, "esp_wifi_connect() directo: %d", ce);
-
-    /* SONDEO DIRECTO DE IP: el C6 no entrega eventos GOT_IP de forma confiable,
-       asi que preguntamos al netif cada segundo si ya tiene IP (hasta 20s). */
-    esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    for (int i = 0; i < 20; i++) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        esp_netif_ip_info_t ipinfo;
-        if (netif_sta && esp_netif_get_ip_info(netif_sta, &ipinfo) == ESP_OK
-            && ipinfo.ip.addr != 0) {
-            ESP_LOGI(TAG, "CONECTADO! IP: " IPSTR, IP2STR(&ipinfo.ip));
-            return true;
-        }
-        ESP_LOGI(TAG, "Esperando IP... (%d/20)", i + 1);
-    }
-    ESP_LOGW(TAG, "Timeout: no se obtuvo IP en 20s");
-    return false;
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                                           pdFALSE, pdFALSE,
+                                           pdMS_TO_TICKS(15000));
+    return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
 
