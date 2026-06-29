@@ -15,9 +15,30 @@
 #include "wifi_manager.h"
 #include "wifi_config_screen.h"
 #include "wifi_provision.h"
+#include "ha_client.h"
 /* wifi_manager temporalmente deshabilitado */
 
 static const char *TAG = "main";
+
+/* ====== Home Assistant ====== */
+#define HA_HOST  "192.168.1.29"
+#define HA_PORT  8123
+#define HA_TOKEN "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIwNTljMjQ1ODJiNTM0MTJhODU0NTIxNDMxMGZmNjFjMyIsImlhdCI6MTc4Mjc1MDk4MywiZXhwIjoyMDk4MTEwOTgzfQ.CiNppjNGKZM0C5v9Q78oawks2RalggVRKmQO9ZlPWd4"   /* <-- token NUEVO de HA */
+
+/* Se llama cuando el WebSocket se autentica (o se cae) con HA */
+static void on_ha_connected(bool connected)
+{
+    if (connected) ESP_LOGI(TAG, "### HA CONECTADO ###");
+    else           ESP_LOGW(TAG, "### HA DESCONECTADO ###");
+}
+
+/* Se llama por cada estado que HA envia. Por ahora solo logueamos. */
+static void on_ha_state(const ha_entity_t *e)
+{
+    if (!e) return;
+    ESP_LOGI(TAG, "HA estado: %s = %s (%s)",
+             e->entity_id, e->state, e->friendly_name);
+}
 
 static void status_task(void *arg)
 {
@@ -84,7 +105,18 @@ void app_main(void)
     /* WiFi: si hay credenciales conecta (STA); si no, muestra pantalla de config tactil */
     if (wifi_provision_has_credentials()) {
         ESP_LOGI(TAG, "Credenciales guardadas, conectando (STA)...");
-        if (wifi_provision_connect()) ESP_LOGI(TAG, "WiFi CONECTADO");
+        if (wifi_provision_connect()) {
+            ESP_LOGI(TAG, "WiFi CONECTADO");
+            /* Arrancar cliente Home Assistant */
+            ha_client_set_connected_cb(on_ha_connected);
+            ha_client_set_state_cb(on_ha_state);
+            if (ha_client_init(HA_HOST, HA_PORT, HA_TOKEN) == ESP_OK) {
+                ha_client_start();
+                ESP_LOGI(TAG, "Cliente HA iniciado, conectando a %s:%d", HA_HOST, HA_PORT);
+            } else {
+                ESP_LOGE(TAG, "Fallo ha_client_init");
+            }
+        }
         else {
             ESP_LOGE(TAG, "Fallo conexion - mostrando config");
             if (lvgl_port_lock(0)) { wifi_config_screen_show(); lvgl_port_unlock(); }
