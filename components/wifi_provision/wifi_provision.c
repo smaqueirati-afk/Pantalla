@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_wifi.h"
+#include "esp_wifi_default.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "lwip/ip4_addr.h"
@@ -272,7 +273,8 @@ bool wifi_provision_connect(void)
     { esp_err_t ee = esp_event_loop_create_default(); if (ee != ESP_OK && ee != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "evt_loop: %d", ee); }
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     { esp_err_t ew = esp_wifi_init(&cfg); if (ew != ESP_OK && ew != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(ew); }
-    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"); /* NO crear netif STA: el stack wifi_remote del C6 ya lo crea */
+    esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta(); /* CREAR netif STA en el host: con esp_wifi_remote lwIP+DHCP corren en el P4, no en el C6 */
+    if (!sta_netif) ESP_LOGW(TAG, "create_default_wifi_sta devolvio NULL (ya existia?)");
 
     /* (init movido arriba) */
     /* (init movido arriba) */
