@@ -9,4 +9,8 @@ idf_component_register(
         esp_event
         log
         freertos
+        esp_hosted
+        esp_driver_sdmmc
+        esp_driver_sdspi
+    EMBED_FILES "network_adapter.bin"
 )

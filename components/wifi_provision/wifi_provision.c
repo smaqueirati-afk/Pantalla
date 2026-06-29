@@ -14,6 +14,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_system.h"
+#include "esp_hosted.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -293,6 +294,11 @@ bool wifi_provision_connect(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* QUICK WIN: desactivar power save - el PS puede romper el handshake de
+       asociacion en el C6 (asocia pero no completa, sin disconnect, sin IP). */
+    { esp_err_t ps = esp_wifi_set_ps(WIFI_PS_NONE);
+      ESP_LOGI(TAG, "esp_wifi_set_ps(NONE): %d", ps); }
+
     /* Forzar conexion directa: con el C6 el evento STA_START no siempre dispara */
     vTaskDelay(pdMS_TO_TICKS(300));
     esp_err_t ce = esp_wifi_connect();
@@ -315,4 +321,122 @@ bool wifi_provision_connect(void)
     return false;
 }
 
+/* ============================================================
+ *  OTA del C6 por SDIO DIRECTO - sin WiFi, sin AP, sin HTTP.
+ *  Lee el network_adapter.bin embebido en el firmware del P4 y
+ *  lo manda al C6 en chunks por SDIO con las funciones RPC del
+ *  esp_hosted. Es el camino que evita todos los crashes de netif.
+ * ============================================================ */
+
+/* Funciones RPC del esp_hosted (definidas en rpc_wrap.c, sin header publico) */
+extern int rpc_ota_begin(void);
+extern int rpc_ota_write(uint8_t* ota_data, uint32_t ota_data_len);
+extern int rpc_ota_end(void);
+
+/* Binario del C6 embebido en el firmware del P4 (ver CMakeLists) */
+extern const uint8_t c6_bin_start[] asm("_binary_network_adapter_bin_start");
+extern const uint8_t c6_bin_end[]   asm("_binary_network_adapter_bin_end");
+
+#define OTA_CHUNK 1400
+
+void wifi_provision_ota_c6(const char *image_url)
+{
+    (void)image_url; /* ya no se usa: el bin esta embebido */
+
+    const uint8_t *p   = c6_bin_start;
+    int total          = (int)(c6_bin_end - c6_bin_start);
+
+    ESP_LOGW(TAG, "=== OTA C6 por SDIO directo ===");
+    ESP_LOGW(TAG, "Firmware embebido: %d bytes", total);
+
+    if (total <= 0) {
+        ESP_LOGE(TAG, "Binario embebido vacio! Revisar el CMakeLists.");
+        return;
+    }
+
+    /* CRITICO: levantar el transporte SDIO con el C6 ANTES del OTA.
+       En esta version, lo que dispara el transporte es esp_wifi_init()
+       (lo vimos en todos los logs: "Base transport is set-up").
+       Inicializamos WiFi SIN crear netif ni AP (eso crasheaba). */
+    ESP_LOGW(TAG, "Levantando transporte via esp_wifi_init...");
+    { esp_err_t e = esp_netif_init();                if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "netif_init: %d", e); }
+    { esp_err_t e = esp_event_loop_create_default(); if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "evt_loop: %d", e); }
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    { esp_err_t e = esp_wifi_init(&cfg);             if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "wifi_init: %d", e); }
+    /* Poner modo STA (no AP, para no necesitar netif) y arrancar: esto sube el transporte */
+    { esp_err_t e = esp_wifi_set_mode(WIFI_MODE_STA); if (e != ESP_OK) ESP_LOGW(TAG, "set_mode: %d", e); }
+    { esp_err_t e = esp_wifi_start();                 if (e != ESP_OK) ESP_LOGW(TAG, "wifi_start: %d", e); }
+
+    ESP_LOGW(TAG, "Esperando 5s a que el transporte SDIO este listo...");
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    ESP_LOGW(TAG, "Iniciando ota_begin (puede tardar)...");
+    int ret = rpc_ota_begin();
+    if (ret != 0) {
+        ESP_LOGE(TAG, "rpc_ota_begin fallo: %d", ret);
+        return;
+    }
+    ESP_LOGW(TAG, "ota_begin OK. Enviando firmware por SDIO...");
+
+    int off = 0;
+    int last_pct = -1;
+    while (off < total) {
+        int chunk = (total - off > OTA_CHUNK) ? OTA_CHUNK : (total - off);
+        ret = rpc_ota_write((uint8_t *)(p + off), chunk);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "rpc_ota_write fallo en offset %d: %d", off, ret);
+            rpc_ota_end();
+            return;
+        }
+        off += chunk;
+        int pct = (off * 100) / total;
+        if (pct != last_pct && pct % 5 == 0) {
+            ESP_LOGW(TAG, "OTA C6: %d%% (%d/%d)", pct, off, total);
+            last_pct = pct;
+        }
+    }
+
+    ESP_LOGW(TAG, "Firmware enviado. Finalizando (ota_end)...");
+    ret = rpc_ota_end();
+    if (ret != 0) {
+        ESP_LOGE(TAG, "rpc_ota_end fallo: %d", ret);
+        return;
+    }
+
+    ESP_LOGW(TAG, "===========================================");
+    ESP_LOGW(TAG, "=== OTA C6 COMPLETADO OK! ===");
+    ESP_LOGW(TAG, "El C6 se va a reiniciar con el firmware 1.4.7");
+    ESP_LOGW(TAG, "Reiniciando el P4 en 8 segundos...");
+    ESP_LOGW(TAG, "===========================================");
+    vTaskDelay(pdMS_TO_TICKS(8000));
+    esp_restart();
+}
+
+/* ============================================================
+ *  Diagnostico: leer la version del firmware del C6
+ * ============================================================ */
+void wifi_provision_check_c6_version(void)
+{
+    ESP_LOGW(TAG, "=== Chequeando version del C6 ===");
+
+    /* Levantar transporte (igual que en el OTA) */
+    { esp_err_t e = esp_netif_init();                if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "netif_init: %d", e); }
+    { esp_err_t e = esp_event_loop_create_default(); if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "evt_loop: %d", e); }
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    { esp_err_t e = esp_wifi_init(&cfg);             if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) ESP_LOGW(TAG, "wifi_init: %d", e); }
+    { esp_err_t e = esp_wifi_set_mode(WIFI_MODE_STA); if (e != ESP_OK) ESP_LOGW(TAG, "set_mode: %d", e); }
+    { esp_err_t e = esp_wifi_start();                 if (e != ESP_OK) ESP_LOGW(TAG, "wifi_start: %d", e); }
+
+    vTaskDelay(pdMS_TO_TICKS(4000));
+
+    esp_hosted_coprocessor_fwver_t ver;
+    esp_err_t err = esp_hosted_get_coprocessor_fwversion(&ver);
+    if (err == ESP_OK) {
+        ESP_LOGW(TAG, "###############################################");
+        ESP_LOGW(TAG, "### VERSION DEL C6: %d.%d.%d ###", (int)ver.major1, (int)ver.minor1, (int)ver.patch1);
+        ESP_LOGW(TAG, "###############################################");
+    } else {
+        ESP_LOGE(TAG, "No se pudo leer la version del C6: %d", err);
+    }
+}
 

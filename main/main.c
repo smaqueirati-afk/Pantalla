@@ -48,6 +48,21 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "SM Domotica - ESP32-P4 arrancando");
     nvs_flash_init();
+
+    /* ====== MODO OTA C6: poner en 1 para actualizar el C6, luego volver a 0 ====== */
+#define OTA_C6_MODE 0
+#if OTA_C6_MODE
+    wifi_provision_ota_c6("embedded");
+    return;
+#endif
+
+    /* ====== CHECK VERSION C6: poner en 1 para leer la version del C6 ====== */
+#define CHECK_C6_VERSION 0
+#if CHECK_C6_VERSION
+    wifi_provision_check_c6_version();
+    /* sigue con la app normal despues de mostrar la version */
+#endif
+    /* ============================================================================ */
     /* 1. Inicializar display + touch + LVGL (Waveshare BSP) */
     bsp_display_start();
     ESP_LOGI(TAG, "Display inicializado");
