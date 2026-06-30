@@ -16,6 +16,8 @@
 #include "wifi_config_screen.h"
 #include "wifi_provision.h"
 #include "ha_client.h"
+#include "esp_netif.h"
+#include <string.h>
 /* wifi_manager temporalmente deshabilitado */
 
 static const char *TAG = "main";
@@ -40,6 +42,64 @@ static void on_ha_state(const ha_entity_t *e)
              e->entity_id, e->state, e->friendly_name);
 }
 
+/* ====== Mapeo de las 6 luces de la pantalla a entidades de HA ======
+ * El indice coincide con LIGHT_NAMES[] de luces_screen.c:
+ *   0 Tubo de LED, 1 Luz Dicroicas, 2 Luz Escritorio,
+ *   3 Tira de LED, 4 Luz de Abajo,  5 Luz del Medio
+ */
+static const char *LUZ_ENTITY[6] = {
+    "switch.luz_oficina_interruptor_1",                       /* 0 Tubo de LED        */
+    "switch.luz_oficina_interruptor_2",                       /* 1 Dicroicas+Escrit.  */
+    "light.pc",                                               /* 2 Luz de Arriba      */
+    "light.efectos_de_luz_tira_de_led_tira_led_oficina",      /* 3 Tira de LED        */
+    "light.tv_1",                                             /* 4 Luz de Abajo       */
+    "light.tv",                                               /* 5 Luz del Medio      */
+};
+
+/* Entidad EXTRA para botones que controlan 2 luces a la vez. NULL = solo una. */
+static const char *LUZ_ENTITY_EXTRA[6] = {
+    NULL,
+    "switch.luz_oficina_interruptor_3",  /* 1 ademas dispara Escritorio */
+    NULL, NULL, NULL, NULL,
+};
+
+/* Manda turn_on/off de UNA entidad a HA */
+static void luz_enviar(const char *entity, bool state)
+{
+    char domain[16] = {0};
+    const char *dot = strchr(entity, '.');
+    if (!dot || (size_t)(dot - entity) >= sizeof(domain)) {
+        ESP_LOGW(TAG, "entity_id raro: %s", entity);
+        return;
+    }
+    memcpy(domain, entity, dot - entity);
+    const char *service = state ? "turn_on" : "turn_off";
+    char body[160];
+    snprintf(body, sizeof(body), "{\"entity_id\":\"%s\"}", entity);
+    esp_err_t r = ha_service_call(domain, service, body);
+    ESP_LOGI(TAG, "  -> %s.%s %s (r=%d)", domain, service, entity, r);
+}
+
+/* on_luz_changed: la version weak de luces_screen.c solo loguea.
+ * Esta version (fuerte) ademas manda el comando real a HA. */
+void on_luz_changed(int idx, bool state)
+{
+    if (idx < 0 || idx >= 6) return;
+    ESP_LOGI(TAG, "Luz %d -> %s", idx, state ? "ON" : "OFF");
+    luz_enviar(LUZ_ENTITY[idx], state);
+    if (LUZ_ENTITY_EXTRA[idx]) luz_enviar(LUZ_ENTITY_EXTRA[idx], state);
+}
+
+/* Devuelve true si el WiFi STA tiene IP asignada (conectado de verdad) */
+static bool wifi_esta_conectado(void)
+{
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!sta) return false;
+    esp_netif_ip_info_t ip;
+    if (esp_netif_get_ip_info(sta, &ip) != ESP_OK) return false;
+    return ip.ip.addr != 0;   /* IP != 0.0.0.0 */
+}
+
 static void status_task(void *arg)
 {
     (void)arg;
@@ -57,8 +117,8 @@ static void status_task(void *arg)
 
         /* LVGL lock obligatorio - modifica objetos UI desde tarea externa */
         if (lvgl_port_lock(50)) {
-            app_nav_set_wifi(false);
-            app_nav_set_ha(false);
+            app_nav_set_wifi(wifi_esta_conectado());
+            app_nav_set_ha(ha_client_is_connected());
             app_nav_set_datetime(date_buf, time_buf);
             lvgl_port_unlock();
         }

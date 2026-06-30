@@ -25,39 +25,39 @@ static const char *TAG = "luces";
 #define BOT_H    40
 #define CARD_W   ((SCR_W - PAD*2 - GAP_C*(COLS-1)) / COLS)  /* ~325 */
 #define CARD_H   ((SCR_H - TOP_H - PAD*2 - GAP_R*(ROWS-1) - BOT_H - GAP_C) / ROWS) /* ~98 */
-#define ICON_BOX 40
-#define TGL_W    36
-#define TGL_H    20
-#define TGL_DOT  14
+#define ICON_BOX 56
+#define TGL_W    52
+#define TGL_H    28
+#define TGL_DOT  20
 
 /* ── Colores ─────────────────────────────────────────────── */
-#define C_BG         lv_color_hex(0x0D0D1A)
-#define C_TOP        lv_color_hex(0x11112A)
-#define C_CARD_OFF   lv_color_hex(0x111122)
-#define C_CARD_ON    lv_color_hex(0x161A10)
-#define C_BDR_OFF    lv_color_hex(0x1E1E3A)
-#define C_BDR_ON     lv_color_hex(0x3A5A1A)
-#define C_ICON_OFF   lv_color_hex(0x3A3A6A)
-#define C_ICON_ON    lv_color_hex(0x88DD22)
-#define C_WRAP_OFF   lv_color_hex(0x1A1A2E)
-#define C_WRAP_ON    lv_color_hex(0x2A4A10)
-#define C_NAME_OFF   lv_color_hex(0xA0A0CC)
-#define C_NAME_ON    lv_color_hex(0xC8F060)
-#define C_STAT_OFF   lv_color_hex(0x4040AA)
-#define C_STAT_ON    lv_color_hex(0x6AAA18)
-#define C_TGL_OFF    lv_color_hex(0x1E1E3A)
-#define C_TGL_ON     lv_color_hex(0x2A4A10)
-#define C_DOT_OFF    lv_color_hex(0x3A3A6A)
-#define C_DOT_ON     lv_color_hex(0x88DD22)
-#define C_GLOW_ON    lv_color_hex(0x4A7A20)
-#define C_GOLD       lv_color_hex(0xE8B84B)
-#define C_DIM        lv_color_hex(0x5050AA)
-#define C_TITLE_LINE lv_color_hex(0x1E1E3A)
+#define C_BG         lv_color_hex(0x0A0E18)
+#define C_TOP        lv_color_hex(0x141A28)
+#define C_CARD_OFF   lv_color_hex(0x1B2233)   /* card apagada: gris azulado claro */
+#define C_CARD_ON    lv_color_hex(0x16301A)   /* card encendida: verde */
+#define C_BDR_OFF    lv_color_hex(0x323C58)   /* borde mas visible */
+#define C_BDR_ON     lv_color_hex(0x55963A)
+#define C_ICON_OFF   lv_color_hex(0x7E88AC)   /* icono apagado mas claro */
+#define C_ICON_ON    lv_color_hex(0xA6F03C)
+#define C_WRAP_OFF   lv_color_hex(0x2A3247)
+#define C_WRAP_ON    lv_color_hex(0x2E5418)
+#define C_NAME_OFF   lv_color_hex(0xFFFFFF)   /* nombre BLANCO = alto contraste */
+#define C_NAME_ON    lv_color_hex(0xC0F560)
+#define C_STAT_OFF   lv_color_hex(0x99A2C2)   /* estado gris legible */
+#define C_STAT_ON    lv_color_hex(0x9AD840)
+#define C_TGL_OFF    lv_color_hex(0x323C58)
+#define C_TGL_ON     lv_color_hex(0x3E7320)
+#define C_DOT_OFF    lv_color_hex(0xB6BEDA)   /* dot apagado claro = visible */
+#define C_DOT_ON     lv_color_hex(0xC0F560)
+#define C_GLOW_ON    lv_color_hex(0x6AB030)
+#define C_GOLD       lv_color_hex(0xF5C842)   /* titulo dorado brillante */
+#define C_DIM        lv_color_hex(0x99A2C2)
+#define C_TITLE_LINE lv_color_hex(0x323C58)
 
 /* ── Luces ───────────────────────────────────────────────── */
 #define LIGHT_COUNT 6
 static const char *LIGHT_NAMES[LIGHT_COUNT] = {
-    "Tubo de LED", "Luz Dicroicas", "Luz Escritorio",
+    "Tubo de LED", "Dicroicas + Escrit.", "Luz de Arriba",
     "Tira de LED", "Luz de Abajo",  "Luz del Medio"
 };
 
@@ -113,30 +113,30 @@ static void init_styles(void)
 
     lv_style_init(&s_card_base);
     lv_style_set_pad_all(&s_card_base, 0);
-    lv_style_set_radius(&s_card_base, 0);
+    lv_style_set_radius(&s_card_base, 14);
     lv_style_set_shadow_width(&s_card_base, 0);
-    lv_style_set_border_width(&s_card_base, 1);
+    lv_style_set_border_width(&s_card_base, 2);
 
     lv_style_init(&s_btn_on);
     lv_style_set_bg_color(&s_btn_on, lv_color_hex(0x1A2A0A));
     lv_style_set_bg_opa(&s_btn_on, LV_OPA_COVER);
-    lv_style_set_border_color(&s_btn_on, lv_color_hex(0x3A5A1A));
-    lv_style_set_border_width(&s_btn_on, 1);
-    lv_style_set_radius(&s_btn_on, 0);
+    lv_style_set_border_color(&s_btn_on, lv_color_hex(0x55963A));
+    lv_style_set_border_width(&s_btn_on, 2);
+    lv_style_set_radius(&s_btn_on, 10);
     lv_style_set_shadow_width(&s_btn_on, 0);
-    lv_style_set_text_color(&s_btn_on, lv_color_hex(0x88DD22));
-    lv_style_set_text_font(&s_btn_on, &lv_font_montserrat_16);
+    lv_style_set_text_color(&s_btn_on, lv_color_hex(0xA6F03C));
+    lv_style_set_text_font(&s_btn_on, &lv_font_montserrat_18);
     lv_style_set_pad_hor(&s_btn_on, 12);
 
     lv_style_init(&s_btn_off);
     lv_style_set_bg_color(&s_btn_off, lv_color_hex(0x2A0A0A));
     lv_style_set_bg_opa(&s_btn_off, LV_OPA_COVER);
-    lv_style_set_border_color(&s_btn_off, lv_color_hex(0x5A1A1A));
-    lv_style_set_border_width(&s_btn_off, 1);
-    lv_style_set_radius(&s_btn_off, 0);
+    lv_style_set_border_color(&s_btn_off, lv_color_hex(0x8A2A2A));
+    lv_style_set_border_width(&s_btn_off, 2);
+    lv_style_set_radius(&s_btn_off, 10);
     lv_style_set_shadow_width(&s_btn_off, 0);
-    lv_style_set_text_color(&s_btn_off, lv_color_hex(0xDD4444));
-    lv_style_set_text_font(&s_btn_off, &lv_font_montserrat_16);
+    lv_style_set_text_color(&s_btn_off, lv_color_hex(0xF06A6A));
+    lv_style_set_text_font(&s_btn_off, &lv_font_montserrat_18);
     lv_style_set_pad_hor(&s_btn_off, 12);
 }
 
@@ -248,7 +248,7 @@ static void build_card(lv_obj_t *parent, int idx)
     lv_obj_set_style_bg_opa(w->icon_wrap, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(w->icon_wrap, lv_color_hex(0x2A2A4A), 0);
     lv_obj_set_style_border_width(w->icon_wrap, 1, 0);
-    lv_obj_set_style_radius(w->icon_wrap, 0, 0);
+    lv_obj_set_style_radius(w->icon_wrap, 12, 0);
     lv_obj_set_style_shadow_width(w->icon_wrap, 0, 0);
     lv_obj_clear_flag(w->icon_wrap, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
@@ -262,18 +262,18 @@ static void build_card(lv_obj_t *parent, int idx)
     /* Name */
     w->name_lbl = lv_label_create(w->card);
     lv_label_set_text(w->name_lbl, LIGHT_NAMES[idx]);
-    lv_obj_set_style_text_font(w->name_lbl, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(w->name_lbl, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(w->name_lbl, C_NAME_OFF, 0);
     lv_label_set_long_mode(w->name_lbl, LV_LABEL_LONG_CLIP);
-    lv_obj_set_width(w->name_lbl, CARD_W - ICON_BOX - TGL_W - 52);
-    lv_obj_set_pos(w->name_lbl, ICON_BOX + 26, CARD_H/2 - 18);
+    lv_obj_set_width(w->name_lbl, CARD_W - ICON_BOX - TGL_W - 56);
+    lv_obj_set_pos(w->name_lbl, ICON_BOX + 30, CARD_H/2 - 24);
 
     /* Status */
     w->stat_lbl = lv_label_create(w->card);
     lv_label_set_text(w->stat_lbl, "Apagada");
-    lv_obj_set_style_text_font(w->stat_lbl, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(w->stat_lbl, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(w->stat_lbl, C_STAT_OFF, 0);
-    lv_obj_set_pos(w->stat_lbl, ICON_BOX + 26, CARD_H/2 + 4);
+    lv_obj_set_pos(w->stat_lbl, ICON_BOX + 30, CARD_H/2 + 6);
 
     /* Toggle track */
     w->tgl_track = lv_obj_create(w->card);
@@ -300,12 +300,12 @@ static void build_card(lv_obj_t *parent, int idx)
 
     /* Glow bar bottom */
     w->glow_bar = lv_obj_create(w->card);
-    lv_obj_set_size(w->glow_bar, CARD_W, 2);
-    lv_obj_set_pos(w->glow_bar, 0, CARD_H - 2);
+    lv_obj_set_size(w->glow_bar, CARD_W - 40, 3);
+    lv_obj_set_pos(w->glow_bar, 20, CARD_H - 8);
     lv_obj_set_style_bg_color(w->glow_bar, C_GLOW_ON, 0);
     lv_obj_set_style_bg_opa(w->glow_bar, LV_OPA_0, 0);
     lv_obj_set_style_border_width(w->glow_bar, 0, 0);
-    lv_obj_set_style_radius(w->glow_bar, 0, 0);
+    lv_obj_set_style_radius(w->glow_bar, 2, 0);
     lv_obj_set_style_shadow_width(w->glow_bar, 0, 0);
     lv_obj_clear_flag(w->glow_bar, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 }
@@ -333,15 +333,15 @@ void luces_screen_create(lv_obj_t *parent)
     lv_obj_align(btn_back, LV_ALIGN_LEFT_MID, 8, 0);
     lv_obj_set_style_bg_color(btn_back, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(btn_back, LV_OPA_0, 0);
-    lv_obj_set_style_border_color(btn_back, lv_color_hex(0x3A3A6A), 0);
+    lv_obj_set_style_border_color(btn_back, lv_color_hex(0x4A5478), 0);
     lv_obj_set_style_border_width(btn_back, 1, 0);
-    lv_obj_set_style_radius(btn_back, 0, 0);
+    lv_obj_set_style_radius(btn_back, 8, 0);
     lv_obj_set_style_shadow_width(btn_back, 0, 0);
     lv_obj_add_event_cb(btn_back, cb_back, LV_EVENT_CLICKED, NULL);
     lv_obj_t *lbl_back = lv_label_create(btn_back);
     lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " Atras");
     lv_obj_set_style_text_font(lbl_back, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_back, lv_color_hex(0xA0A0CC), 0);
+    lv_obj_set_style_text_color(lbl_back, lv_color_hex(0xC8CEE6), 0);
     lv_obj_center(lbl_back);
 
     /* Titulo */
@@ -354,14 +354,14 @@ void luces_screen_create(lv_obj_t *parent)
     /* Status count */
     lv_obj_t *st_lbl = lv_label_create(top);
     lv_label_set_text(st_lbl, "Encendidas:");
-    lv_obj_set_style_text_font(st_lbl, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(st_lbl, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(st_lbl, C_DIM, 0);
-    lv_obj_align(st_lbl, LV_ALIGN_RIGHT_MID, -90, 0);
+    lv_obj_align(st_lbl, LV_ALIGN_RIGHT_MID, -95, 0);
 
     ls.lbl_count = lv_label_create(top);
     lv_label_set_text(ls.lbl_count, "0 / 6");
-    lv_obj_set_style_text_font(ls.lbl_count, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(ls.lbl_count, lv_color_hex(0x88DD22), 0);
+    lv_obj_set_style_text_font(ls.lbl_count, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_color(ls.lbl_count, lv_color_hex(0xA6F03C), 0);
     lv_obj_align(ls.lbl_count, LV_ALIGN_RIGHT_MID, -12, 0);
 
     /* Linea inferior topbar */

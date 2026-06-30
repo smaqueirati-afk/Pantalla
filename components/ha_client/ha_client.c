@@ -173,29 +173,6 @@ static void ha_authenticate(void)
 }
 
 /* ── Subscribe to state_changed ── */
-static void ha_request_speedtest(void)
-{
-    /* Request speedtest entities specifically */
-    const char *entities[] = {
-        "sensor.speedtest_descarga",
-        "sensor.speedtest_subida",
-        "sensor.speedtest_ping",
-        NULL
-    };
-    for (int i = 0; entities[i]; i++) {
-        cJSON *msg = cJSON_CreateObject();
-        cJSON_AddNumberToObject(msg, "id", s_msg_id++);
-        cJSON_AddStringToObject(msg, "type", "call_service");
-        cJSON_AddStringToObject(msg, "domain", "homeassistant");
-        cJSON_AddStringToObject(msg, "service", "update_entity");
-        cJSON *sdata = cJSON_CreateObject();
-        cJSON_AddStringToObject(sdata, "entity_id", entities[i]);
-        cJSON_AddItemToObject(msg, "service_data", sdata);
-        ha_send(msg);
-        cJSON_Delete(msg);
-    }
-}
-
 static void ha_subscribe_states(void)
 {
     cJSON *msg = cJSON_CreateObject();
@@ -237,7 +214,6 @@ static void process_message(const char *data, int len)
         s_authenticated = true;
         ha_get_states();
         ha_subscribe_states();
-        ha_request_speedtest();
         if (s_connected_cb) s_connected_cb(true);
 
     } else if (strcmp(t, "auth_invalid") == 0) {
@@ -400,12 +376,10 @@ esp_err_t ha_client_start(void)
 
     esp_websocket_client_config_t ws_cfg = {
         .uri = uri,
-        .reconnect_timeout_ms = 10000,
-        .network_timeout_ms   = 30000,
-        .network_timeout_ms   = 15000,
-        .buffer_size          = 2048,
-        .ping_interval_sec    = 30,
-        .headers = "Origin: http://192.168.1.150\r\n",
+        .reconnect_timeout_ms = 5000,
+        .network_timeout_ms   = 10000,
+        .buffer_size          = 4096,
+        .ping_interval_sec    = 20,
     };
 
     s_client = esp_websocket_client_init(&ws_cfg);
